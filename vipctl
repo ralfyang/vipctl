@@ -1,0 +1,101 @@
+#!/bin/bash
+## Made by Ralf Yang
+## If you need some help about this script, Please feel free contact me via email :)
+## goody80762#gmail.com
+
+ZinstBaseRoot="/tmp"
+
+
+## Setup for VIP loopback to ifconfig
+name="DEFAULT"
+
+## vips="Virtual IP what you need to add"
+vips="1.1.1.2"
+onboot="yes"
+
+Check_file="l4-check.html"
+## DIR="$Check_file will be here. It will be uses by switch health-check via www. Please make sure this"
+DIR="/data/src/html"
+
+	if [[ ! -d $DIR ]]; then
+		mkdir -p $DIR
+	fi
+
+
+	if [[ $1 = "" ]]; then
+		echo "vipctl needs an option as - [ start | stop | restart | on | off ]"
+		exit 1;
+	fi
+
+echo "DEVICE=lo:$name" > /etc/sysconfig/network-scripts/ifcfg-lo:$name
+echo "BOOTPROTO=none" >> /etc/sysconfig/network-scripts/ifcfg-lo:$name
+echo "IPADDR=$vips"  >> /etc/sysconfig/network-scripts/ifcfg-lo:$name
+echo "NETMASK=255.255.255.255"  >> /etc/sysconfig/network-scripts/ifcfg-lo:$name
+echo "ONBOOT=$onboot"  >> /etc/sysconfig/network-scripts/ifcfg-lo:$name
+
+VipMgt(){
+	VIPChecker=`ifconfig lo:$2 |grep addr | awk '{print $2}' | sed -e 's/addr://g'`
+		if [[ $VIPChecker = $3 ]]; then
+			echo " [$vips] - Loopback $1 - [OK] "
+		else
+			echo " [$vips] - Loopback $1 - [Fail] "
+		fi
+}
+
+
+PageMgt(){
+	PageResult=`cat $DIR/$Check_file 2> /dev/null`
+		if [[ $PageResult = "" ]]; then
+			echo " Status file - [empty]"
+		else
+			echo " Status file - [$PageResult]"
+		fi
+}
+
+
+
+	# start
+	if [[ $1 = "start" ]]
+	then
+		sysctl -w net.ipv4.conf.lo.arp_ignore=1 1> /dev/null
+		sysctl -w net.ipv4.conf.lo.arp_announce=2 1> /dev/null
+		sysctl -w net.ipv4.conf.all.arp_ignore=1 1> /dev/null
+		sysctl -w net.ipv4.conf.all.arp_announce=2 1> /dev/null
+		ifup ifcfg-lo:$name
+		VipMgt setup  $name $vips
+
+	fi
+
+	# stop
+	if [[ $1 = "stop" ]]
+	then
+		sysctl -w net.ipv4.conf.lo.arp_ignore=0 1> /dev/null
+		sysctl -w net.ipv4.conf.lo.arp_announce=0 1> /dev/null
+		sysctl -w net.ipv4.conf.all.arp_ignore=0 1> /dev/null
+		sysctl -w net.ipv4.conf.all.arp_announce=0 1> /dev/null
+		ifdown ifcfg-lo:$name
+		VipMgt unset $name
+
+	fi
+
+	# restart
+	if [[ $1 = "restart" ]]
+	then
+		ifdown ifcfg-lo:$name
+		ifup ifcfg-lo:$name
+		VipMgt re-setup $name $vips
+	fi
+
+	# on
+	if [[ $1 = "on" ]]
+	then
+		echo "OK" > $DIR/$Check_file
+		PageMgt
+	fi
+
+	# off
+	if [[ $1 = "off" ]]
+	then
+		rm -f $DIR/$Check_file
+		PageMgt
+	fi
